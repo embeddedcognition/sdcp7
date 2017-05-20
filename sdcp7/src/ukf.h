@@ -91,7 +91,14 @@ class UKF
          * ProcessMeasurement
          * @param meas_package The latest measurement data of either radar or laser
          */
-        void ProcessMeasurement(MeasurementPackage meas_package);
+        void ProcessMeasurement(const MeasurementPackage& measurement_pack);
+
+    private:
+        //normalize the supplied angle to be within -pi to pi
+        double NormalizeAngle(const double angle);
+
+        //const for PI
+        const double PI = 3.14159265358979;
 
         /**
          * Prediction Predicts sigma points, the state, and the state covariance
@@ -104,13 +111,13 @@ class UKF
          * Updates the state and the state covariance matrix using a laser measurement
          * @param meas_package The measurement at k+1
          */
-        void UpdateLidar(MeasurementPackage meas_package);
+        void UpdateLidar(const MeasurementPackage& measurement_pack);
 
         /**
          * Updates the state and the state covariance matrix using a radar measurement
          * @param meas_package The measurement at k+1
          */
-        void UpdateRadar(MeasurementPackage meas_package);
+        void UpdateRadar(const MeasurementPackage& measurement_pack);
 };
 
 #endif /* UKF_H */
