@@ -1,25 +1,27 @@
+/*
+#######################################################
+## AUTHOR: James Beasley                             ##
+## DATE: May 8, 2017                                 ##
+## UDACITY SDC: Project 7 (Unscented Kalman Filters) ##
+#######################################################
+*/
+
 #ifndef TOOLS_H_
 #define TOOLS_H_
+
 #include <vector>
 #include "Eigen/Dense"
 
-class Tools {
-public:
-  /**
-  * Constructor.
-  */
-  Tools();
+class Tools
+{
+    public:
+        //constructor
+        Tools();
+        //destructor
+        virtual ~Tools();
 
-  /**
-  * Destructor.
-  */
-  virtual ~Tools();
-
-  /**
-  * A helper method to calculate RMSE.
-  */
-  Eigen::VectorXd CalculateRMSE(const std::vector<Eigen::VectorXd> &estimations, const std::vector<Eigen::VectorXd> &ground_truth);
-
+        //compute RMSE
+        Eigen::VectorXd ComputeRMSE(const std::vector<Eigen::VectorXd> &estimations, const std::vector<Eigen::VectorXd> &ground_truth);
 };
 
 #endif /* TOOLS_H_ */

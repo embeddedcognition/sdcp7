@@ -1,3 +1,11 @@
+/*
+#######################################################
+## AUTHOR: James Beasley                             ##
+## DATE: May 8, 2017                                 ##
+## UDACITY SDC: Project 7 (Unscented Kalman Filters) ##
+#######################################################
+*/
+
 #include "ukf.h"
 #include "tools.h"
 #include "Eigen/Dense"
@@ -8,10 +16,9 @@ using Eigen::MatrixXd;
 using Eigen::VectorXd;
 using std::vector;
 
-/**
- * Initializes Unscented Kalman filter
- */
-UKF::UKF() {
+//constructor
+UKF::UKF()
+{
   // if this is false, laser measurements will be ignored (except during init)
   use_laser_ = true;
 
@@ -54,13 +61,15 @@ UKF::UKF() {
   */
 }
 
+//destructor
 UKF::~UKF() {}
 
 /**
  * @param {MeasurementPackage} meas_package The latest measurement data of
  * either radar or laser.
  */
-void UKF::ProcessMeasurement(MeasurementPackage meas_package) {
+void UKF::ProcessMeasurement(MeasurementPackage meas_package)
+{
   /**
   TODO:
 
@@ -74,7 +83,8 @@ void UKF::ProcessMeasurement(MeasurementPackage meas_package) {
  * @param {double} delta_t the change in time (in seconds) between the last
  * measurement and this one.
  */
-void UKF::Prediction(double delta_t) {
+void UKF::Prediction(double delta_t)
+{
   /**
   TODO:
 
@@ -87,7 +97,8 @@ void UKF::Prediction(double delta_t) {
  * Updates the state and the state covariance matrix using a laser measurement.
  * @param {MeasurementPackage} meas_package
  */
-void UKF::UpdateLidar(MeasurementPackage meas_package) {
+void UKF::UpdateLidar(MeasurementPackage meas_package)
+{
   /**
   TODO:
 
@@ -102,7 +113,8 @@ void UKF::UpdateLidar(MeasurementPackage meas_package) {
  * Updates the state and the state covariance matrix using a radar measurement.
  * @param {MeasurementPackage} meas_package
  */
-void UKF::UpdateRadar(MeasurementPackage meas_package) {
+void UKF::UpdateRadar(MeasurementPackage meas_package)
+{
   /**
   TODO:
 
