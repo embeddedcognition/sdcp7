@@ -66,12 +66,14 @@ UKF::~UKF() {}
  */
 void UKF::ProcessMeasurement(const MeasurementPackage& measurement_pack)
 {
-  /**
-  TODO:
-
-  Complete this function! Make sure you switch between lidar and radar
-  measurements.
-  */
+    //if this is the first time, we need to initialize x with the current measurement,
+    //then exit (filtering will start with the next iteration)
+    if (!is_initialized_)
+    {
+        FirstTimeInit(measurement_pack);
+        //no need to predict or update so we return
+        return;
+    }
 }
 
 /**
@@ -136,4 +138,49 @@ double UKF::NormalizeAngle(const double angle)
     }
 
     return normalized_angle;
+}
+
+//this is executed the first time only
+void UKF::FirstTimeInit(const MeasurementPackage& measurement_pack)
+{
+    //local vars
+    //for laser: col_1 will equal px and col_2 will equal py
+    //for radar: col_1 will equal r (e.g., rho) and col_2 will equal θ (e.g., phi)
+    float col_1 = measurement_pack.raw_measurements_(0);
+    float col_2 = measurement_pack.raw_measurements_(1);
+    float px; //x position
+    float py; //y position
+
+    //if this is radar data
+    if (measurement_pack.sensor_type_ == MeasurementPackage::RADAR)
+    {
+        //we need to convert from polar coordinates (r, θ) to cartesian coordinates (x, y), via x = r * cos(θ) and y = r * sin(θ)
+        px = col_1 * cos(col_2);
+        py = col_1 * sin(col_2);
+    }
+    //if this is lidar data
+    else if (measurement_pack.sensor_type_ == MeasurementPackage::LASER)
+    {
+        //we're already in cartesian coordinates, so just assign to px and py
+        px = col_1;
+        py = col_2;
+    }
+
+    //init state vector x, which is in cartesian coordinates (px, py, v, psi, psi_dot)
+    //since we'll not have enough information to initialize the velocity portion of the state vector (vx and vy),
+    //i.e., we only have the current position to go on, we'll set it to zero
+    x_ << px, py, 0, 0, 0;
+
+    //init the matrix P to the identity matrix
+    P_ << 1, 0, 0, 0, 0,
+          0, 1, 0, 0, 0,
+          0, 0, 1, 0, 0,
+          0, 0, 0, 1, 0,
+          0, 0, 0, 0, 1;
+
+    //capture the timestamp of the measurement for future use
+    //previous_timestamp_ = measurement_pack.timestamp_;
+
+    //done initializing
+    is_initialized_ = true;
 }

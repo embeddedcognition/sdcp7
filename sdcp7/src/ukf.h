@@ -96,6 +96,8 @@ class UKF
     private:
         //normalize the supplied angle to be within -pi to pi
         double NormalizeAngle(const double angle);
+        //function that handles first time init
+        void FirstTimeInit(const MeasurementPackage& measurement_pack);
 
         //const for PI
         const double PI = 3.14159265358979;
