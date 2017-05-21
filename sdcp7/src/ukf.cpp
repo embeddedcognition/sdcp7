@@ -19,6 +19,9 @@ using std::vector;
 
 //constructor
 UKF::UKF()
+//initialize constants through member initialization list
+: std_a_(30), std_yawdd_(30), std_laspx_(0.15), std_laspy_(0.15), std_radr_(0.3),
+  std_radphi_(0.03), std_radrd_(0.3), n_x_(5), n_aug_(7), lambda_(3 - n_aug_), PI(3.14159265358979)
 {
     //bool to invoke initialization on first "ProcessMeasurement" call
     is_initialized_ = false;
@@ -32,40 +35,32 @@ UKF::UKF()
     //initial state vector
     x_ = VectorXd(5);
 
-    // initial covariance matrix
+    //initial covariance matrix
     P_ = MatrixXd(5, 5);
 
-    //process noise standard deviation longitudinal acceleration in m/s^2
-    std_a_ = 30;
+    //predicted sigma points
+    Xsig_pred_ = MatrixXd(n_x_, (2 * n_aug_) + 1);
 
-    //process noise standard deviation yaw acceleration in rad/s^2
-    std_yawdd_ = 30;
+    //weights for sigma points
+    weights_ = VectorXd((2 * n_aug_) + 1);
 
-    //laser measurement noise standard deviation position1 in m
-    std_laspx_ = 0.15;
+    //previous measurement timestamp
+    previous_timestamp_ = 0;
 
-    //laser measurement noise standard deviation position2 in m
-    std_laspy_ = 0.15;
-
-    //radar measurement noise standard deviation radius in m
-    std_radr_ = 0.3;
-
-    //radar measurement noise standard deviation angle in rad
-    std_radphi_ = 0.03;
-
-    //radar measurement noise standard deviation radius change in m/s
-    std_radrd_ = 0.3;
+    //NIS
+    NIS_radar_ = 0;
+    NIS_laser_ = 0;
 }
 
 //destructor
 UKF::~UKF() {}
 
-/**
- * @param {MeasurementPackage} meas_package The latest measurement data of
- * either radar or laser.
- */
+//process the latest measurement received from the sensor
 void UKF::ProcessMeasurement(const MeasurementPackage& measurement_pack)
 {
+    //local vars
+    double delta_t_;    //elapsed time between the current and previous measurements (in seconds)
+
     //if this is the first time, we need to initialize x with the current measurement,
     //then exit (filtering will start with the next iteration)
     if (!is_initialized_)
@@ -74,21 +69,54 @@ void UKF::ProcessMeasurement(const MeasurementPackage& measurement_pack)
         //no need to predict or update so we return
         return;
     }
+
+    //compute the time elapsed between the current and previous measurements (in seconds)
+    delta_t_ = (measurement_pack.timestamp_ - previous_timestamp_) / 1000000.0;
+
+    //capture the timestamp of the measurement for future use
+    previous_timestamp_ = measurement_pack.timestamp_;
+
+    //update the state transition matrix (F) according to the new elapsed time
+    kf_.UpdateStateTransitionMatrix(dt);
+
+    //update the process (noise) covariance matrix according to the new elapsed time
+    kf_.UpdateProcessCovarianceMatrix(dt);
+
+    //perform kalman prediction step
+    kf_.PerformPredict();
+
+    //perform kalman update step
+    if (measurement_pack.sensor_type_ == MeasurementPackage::RADAR)
+    {
+        //compute the jacobian
+        VectorXd x_state = kf_.GetState();
+        Hj_ = tools_.ComputeJacobian(x_state);
+        //set the appropriate H & R matrices based upon the sensor type
+        kf_.SetMeasurementMatrices(Hj_, R_radar_);
+        //for radar, use extended kalman filter equations
+        kf_.PerformUpdateEKF(measurement_pack.raw_measurements_);
+    }
+    else
+    {
+        //set the appropriate H & R matrices based upon the sensor type
+        kf_.SetMeasurementMatrices(H_laser_, R_laser_);
+        //for lidar, use normal kalman filter equations
+        kf_.PerformUpdate(measurement_pack.raw_measurements_);
+    }
+
+    // print the output
+    //cout << "x_ = " << kf_.GetState() << endl;
+    //cout << "P_ = " << kf_.GetStateCovariance() << endl;
 }
 
-/**
- * Predicts sigma points, the state, and the state covariance matrix.
- * @param {double} delta_t the change in time (in seconds) between the last
- * measurement and this one.
- */
-void UKF::Prediction(double delta_t)
+//perform kalman prediction step
+void UKF::Prediction(const double delta_t)
 {
-  /**
-  TODO:
+    //generate sigma points
 
-  Complete this function! Estimate the object's location. Modify the state
-  vector, x_. Predict sigma points, the state, and the state covariance matrix.
-  */
+    //predict sigma points
+
+    //predict the state and state covariance matrix
 }
 
 /**
@@ -179,94 +207,14 @@ void UKF::FirstTimeInit(const MeasurementPackage& measurement_pack)
           0, 0, 0, 0, 1;
 
     //capture the timestamp of the measurement for future use
-    //previous_timestamp_ = measurement_pack.timestamp_;
+    previous_timestamp_ = measurement_pack.timestamp_;
 
     //done initializing
     is_initialized_ = true;
 }
 
-void UKF::GenerateSigmaPoints(MatrixXd* Xsig_out) {
-
-  //set state dimension
-  int n_x = 5;
-
-  //define spreading parameter
-  double lambda = 3 - n_x;
-
-  //set example state
-  VectorXd x = VectorXd(n_x);
-  x <<   5.7441,
-         1.3800,
-         2.2049,
-         0.5015,
-         0.3528;
-
-  //set example covariance matrix
-  MatrixXd P = MatrixXd(n_x, n_x);
-  P <<     0.0043,   -0.0013,    0.0030,   -0.0022,   -0.0020,
-          -0.0013,    0.0077,    0.0011,    0.0071,    0.0060,
-           0.0030,    0.0011,    0.0054,    0.0007,    0.0008,
-          -0.0022,    0.0071,    0.0007,    0.0098,    0.0100,
-          -0.0020,    0.0060,    0.0008,    0.0100,    0.0123;
-
-  //create sigma point matrix
-  MatrixXd Xsig = MatrixXd(n_x, 2 * n_x + 1);
-
-  //calculate square root of P
-  MatrixXd A = P.llt().matrixL();
-
-/*******************************************************************************
- * Student part begin
- ******************************************************************************/
-
-  //get sqrt of lambda + nx
-  double sqrt_lambda_plus_nx = sqrt(lambda + n_x);
-  //compute total sqrt
-  MatrixXd sqrt_total = sqrt_lambda_plus_nx * A;
-
-  int Xsig_index = 1;
-
-  //populate the mean
-  Xsig.col(0) = x;
-
-  //populate the "right" (positive) and "left" (negative) sigma points at the same time
-  for (int i = 0; i < sqrt_total.cols(); i++)
-  {
-       Xsig.col(Xsig_index) = x + sqrt_total.col(i);
-       Xsig.col(Xsig_index + sqrt_total.cols()) = x - sqrt_total.col(i);
-       Xsig_index++;
-  }
-
-  //populate the "left" sigma points (negative)
-  //for (int i = 0; i < sqrt_total.cols(); i++)
-  //{
-//       Xsig.col(Xsig_index) = x - sqrt_total.col(i);
-//       Xsig_index++;
-//  }
-
-/*******************************************************************************
- * Student part end
- ******************************************************************************/
-
-  //print result
-  //std::cout << "Xsig = " << std::endl << Xsig << std::endl;
-
-  //write result
-  *Xsig_out = Xsig;
-
-/* expected result:
-   Xsig =
-    5.7441  5.85768   5.7441   5.7441   5.7441   5.7441  5.63052   5.7441   5.7441   5.7441   5.7441
-      1.38  1.34566  1.52806     1.38     1.38     1.38  1.41434  1.23194     1.38     1.38     1.38
-    2.2049  2.28414  2.24557  2.29582   2.2049   2.2049  2.12566  2.16423  2.11398   2.2049   2.2049
-    0.5015  0.44339 0.631886 0.516923 0.595227   0.5015  0.55961 0.371114 0.486077 0.407773   0.5015
-    0.3528 0.299973 0.462123 0.376339  0.48417 0.418721 0.405627 0.243477 0.329261  0.22143 0.286879
-*/
-
-}
-
-void UKF::AugmentedSigmaPoints(MatrixXd* Xsig_out) {
-
+void UKF::ComputeAugmentedSigmaPoints(MatrixXd* Xsig_out)
+{
   //set state dimension
   int n_x = 5;
 
@@ -359,18 +307,6 @@ void UKF::AugmentedSigmaPoints(MatrixXd* Xsig_out) {
 
   //write result
   *Xsig_out = Xsig_aug;
-
-/* expected result:
-   Xsig_aug =
-  5.7441  5.85768   5.7441   5.7441   5.7441   5.7441   5.7441   5.7441  5.63052   5.7441   5.7441   5.7441   5.7441   5.7441   5.7441
-    1.38  1.34566  1.52806     1.38     1.38     1.38     1.38     1.38  1.41434  1.23194     1.38     1.38     1.38     1.38     1.38
-  2.2049  2.28414  2.24557  2.29582   2.2049   2.2049   2.2049   2.2049  2.12566  2.16423  2.11398   2.2049   2.2049   2.2049   2.2049
-  0.5015  0.44339 0.631886 0.516923 0.595227   0.5015   0.5015   0.5015  0.55961 0.371114 0.486077 0.407773   0.5015   0.5015   0.5015
-  0.3528 0.299973 0.462123 0.376339  0.48417 0.418721   0.3528   0.3528 0.405627 0.243477 0.329261  0.22143 0.286879   0.3528   0.3528
-       0        0        0        0        0        0  0.34641        0        0        0        0        0        0 -0.34641        0
-       0        0        0        0        0        0        0  0.34641        0        0        0        0        0        0 -0.34641
-*/
-
 }
 
 void UKF::SigmaPointPrediction(MatrixXd* Xsig_out) {
