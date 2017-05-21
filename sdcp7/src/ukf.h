@@ -98,6 +98,14 @@ class UKF
         double NormalizeAngle(const double angle);
         //function that handles first time init
         void FirstTimeInit(const MeasurementPackage& measurement_pack);
+        //generate the sigma points
+        void GenerateSigmaPoints(MatrixXd* Xsig_out);
+
+        void AugmentedSigmaPoints(MatrixXd* Xsig_out);
+        void SigmaPointPrediction(MatrixXd* Xsig_out);
+        void PredictMeanAndCovariance(VectorXd* x_pred, MatrixXd* P_pred);
+        void PredictRadarMeasurement(VectorXd* z_out, MatrixXd* S_out);
+        void UpdateState(VectorXd* x_out, MatrixXd* P_out);
 
         //const for PI
         const double PI = 3.14159265358979;
