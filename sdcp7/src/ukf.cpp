@@ -7,8 +7,6 @@
 */
 
 #include "ukf.h"
-#include "tools.h"
-#include "Eigen/Dense"
 #include <iostream>
 #include <math.h>
 
@@ -43,6 +41,9 @@ UKF::UKF()
 
     //weights for sigma points
     weights_ = VectorXd((2 * n_aug_) + 1);
+    //init weights
+    weights_.fill(1 / (2 * (lambda_ + n_aug_)));  //set all elements
+    weights_(0) = lambda_ / (lambda_ + n_aug_);    //set first element differently
 
     //previous measurement timestamp
     previous_timestamp_ = 0;
@@ -213,150 +214,86 @@ void UKF::FirstTimeInit(const MeasurementPackage& measurement_pack)
     is_initialized_ = true;
 }
 
+//create augmented sigma points
 void UKF::ComputeAugmentedSigmaPoints(MatrixXd* Xsig_out)
 {
-  //set state dimension
-  int n_x = 5;
+    MatrixXd Q = MatrixXd(2, 2);                                //process noise covariance matrix
+    VectorXd x_aug = VectorXd(7);                               //augmented mean vector
+    MatrixXd P_aug = MatrixXd(7, 7);                            //augmented state covariance
+    MatrixXd Xsig_aug = MatrixXd(n_aug_, (2 * n_aug_) + 1);     //augmented sigma point matrix (state + process noise)
 
-  //set augmented dimension
-  int n_aug = 7;
+    //compute augmented mean state
+    x_aug.head(x_.size()) = x_; //copy x into first 5 elements of x_aug
+    x_aug(5) = 0; //copy mean value of acceleration noise
+    x_aug(6) = 0; //copy mean value of acceleration noise
 
-  //Process noise standard deviation longitudinal acceleration in m/s^2
-  double std_a = 0.2;
+    //init process noise covariance matrix
+    //we're supplied the std dev for longitudinal acceleration and yaw acceleration, but we must square to get variance
+    Q << (std_a_ * std_a_), 0,
+         0, (std_yawdd_ * std_yawdd_);
 
-  //Process noise standard deviation yaw acceleration in rad/s^2
-  double std_yawdd = 0.2;
+    //compute augmented state covariance
+    //set P to the top left corner
+    P_aug.topLeftCorner(P_.rows(), P_.cols()) = P_;
+    //set Q to the bottom right corner
+    P_aug.bottomRightCorner(Q.rows(), Q.cols()) = Q;
 
-  //define spreading parameter
-  double lambda = 3 - n_aug;
+    //create square root matrix
+    //calculate square root of P
+    MatrixXd A = P_aug.llt().matrixL();
+    //get sqrt of lambda + n_aug
+    double sqrt_lambda_plus_naug = sqrt(lambda_ + n_aug_);
+    //compute total sqrt
+    MatrixXd sqrt_total = sqrt_lambda_plus_naug * A;
 
-  //set example state
-  VectorXd x = VectorXd(n_x);
-  x <<   5.7441,
-         1.3800,
-         2.2049,
-         0.5015,
-         0.3528;
+    //create augmented sigma points
+    int Xsig_aug_index = 1; //index starts at second column
 
-  //create example covariance matrix
-  MatrixXd P = MatrixXd(n_x, n_x);
-  P <<     0.0043,   -0.0013,    0.0030,   -0.0022,   -0.0020,
-          -0.0013,    0.0077,    0.0011,    0.0071,    0.0060,
-           0.0030,    0.0011,    0.0054,    0.0007,    0.0008,
-          -0.0022,    0.0071,    0.0007,    0.0098,    0.0100,
-          -0.0020,    0.0060,    0.0008,    0.0100,    0.0123;
+    //populate the augmented mean
+    Xsig_aug.col(0) = x_aug;
 
-  //create Q matrix
-  MatrixXd Q = MatrixXd(2, 2);
-  //we're supllied the std dev, but we must square to get variance
-  Q << (std_a * std_a), 0,
-       0, (std_yawdd * std_yawdd);
+    //populate the "right" (positive) and "left" (negative) sigma points at the same time
+    for (int i = 0; i < sqrt_total.cols(); i++)
+    {
+        Xsig_aug.col(Xsig_aug_index) = x_aug + sqrt_total.col(i);
+        Xsig_aug.col(Xsig_aug_index + sqrt_total.cols()) = x_aug - sqrt_total.col(i);
+        Xsig_aug_index++;
+    }
 
-  //create augmented mean vector
-  VectorXd x_aug = VectorXd(7);
+    //print result
+    std::cout << "Xsig_aug = " << std::endl << Xsig_aug << std::endl;
 
-  //create augmented state covariance
-  MatrixXd P_aug = MatrixXd(7, 7);
-
-  //create sigma point matrix
-  MatrixXd Xsig_aug = MatrixXd(n_aug, 2 * n_aug + 1);
-
-/*******************************************************************************
- * Student part begin
- ******************************************************************************/
-
-  //##create augmented mean state
-  x_aug.head(x.size()) = x; //copy x into first 5 elements of x_aug
-  x_aug(5) = 0; //copy mean value of acceleration noise
-  x_aug(6) = 0; //copy mean value of acceleration noise
-
-  //##create augmented covariance matrix
-  //set P to the top left corner
-  P_aug.topLeftCorner(P.rows(), P.cols()) = P;
-  //set Q to the bottom right corner
-  P_aug.bottomRightCorner(Q.rows(), Q.cols()) = Q;
-
-  //##create square root matrix
-  //calculate square root of P
-  MatrixXd A = P_aug.llt().matrixL();
-  //get sqrt of lambda + n_aug
-  double sqrt_lambda_plus_naug = sqrt(lambda + n_aug);
-  //compute total sqrt
-  MatrixXd sqrt_total = sqrt_lambda_plus_naug * A;
-
-  //##create augmented sigma points
-  int Xsig_aug_index = 1;
-
-  //populate the augmented mean
-  Xsig_aug.col(0) = x_aug;
-
-  //populate the "right" (positive) and "left" (negative) sigma points at the same time
-  for (int i = 0; i < sqrt_total.cols(); i++)
-  {
-       Xsig_aug.col(Xsig_aug_index) = x_aug + sqrt_total.col(i);
-       Xsig_aug.col(Xsig_aug_index + sqrt_total.cols()) = x_aug - sqrt_total.col(i);
-       Xsig_aug_index++;
-  }
-
-/*******************************************************************************
- * Student part end
- ******************************************************************************/
-
-  //print result
-  std::cout << "Xsig_aug = " << std::endl << Xsig_aug << std::endl;
-
-  //write result
-  *Xsig_out = Xsig_aug;
+    //write result
+    *Xsig_out = Xsig_aug;
 }
 
-void UKF::SigmaPointPrediction(MatrixXd* Xsig_out) {
-
-  //set state dimension
-  int n_x = 5;
-
-  //set augmented dimension
-  int n_aug = 7;
-
-  //create example sigma point matrix
-  MatrixXd Xsig_aug = MatrixXd(n_aug, 2 * n_aug + 1);
-     Xsig_aug <<
-    5.7441,  5.85768,   5.7441,   5.7441,   5.7441,   5.7441,   5.7441,   5.7441,   5.63052,   5.7441,   5.7441,   5.7441,   5.7441,   5.7441,   5.7441,
-      1.38,  1.34566,  1.52806,     1.38,     1.38,     1.38,     1.38,     1.38,   1.41434,  1.23194,     1.38,     1.38,     1.38,     1.38,     1.38,
-    2.2049,  2.28414,  2.24557,  2.29582,   2.2049,   2.2049,   2.2049,   2.2049,   2.12566,  2.16423,  2.11398,   2.2049,   2.2049,   2.2049,   2.2049,
-    0.5015,  0.44339, 0.631886, 0.516923, 0.595227,   0.5015,   0.5015,   0.5015,   0.55961, 0.371114, 0.486077, 0.407773,   0.5015,   0.5015,   0.5015,
-    0.3528, 0.299973, 0.462123, 0.376339,  0.48417, 0.418721,   0.3528,   0.3528,  0.405627, 0.243477, 0.329261,  0.22143, 0.286879,   0.3528,   0.3528,
-         0,        0,        0,        0,        0,        0,  0.34641,        0,         0,        0,        0,        0,        0, -0.34641,        0,
-         0,        0,        0,        0,        0,        0,        0,  0.34641,         0,        0,        0,        0,        0,        0, -0.34641;
-
-  //create matrix with predicted sigma points as columns
-  MatrixXd Xsig_pred = MatrixXd(n_x, 2 * n_aug + 1);
-
-  double delta_t = 0.1; //time diff in sec
-/*******************************************************************************
- * Student part begin
- ******************************************************************************/
-  VectorXd state_pred = VectorXd(n_x);
-  VectorXd noise_pred = VectorXd(n_x);
+void UKF::SigmaPointPrediction(MatrixXd& Xsig_aug_in, const double delta_t_in, MatrixXd* Xsig_out)
+{
+    //create matrix with predicted sigma points as columns
+     MatrixXd Xsig_pred = MatrixXd(n_x_, (2 * n_aug_) + 1);
+  VectorXd state_pred = VectorXd(n_x_);
+  VectorXd noise_pred = VectorXd(n_x_);
   VectorXd cur_sig;
+  double delta_t_squared = delta_t_in * delta_t_in;
 
   //predict sigma points
   //process each sigma point prediction
-  for (int i = 0; i < Xsig_aug.cols(); i++)
+  for (int i = 0; i < Xsig_aug_in.cols(); i++)
   {
       //get a handle to the first 5 elelments of the current sigma point
-      cur_sig = (Xsig_aug.col(i)).head(5);
+      cur_sig = (Xsig_aug_in.col(i)).head(5);
       //compute the process model transformation for each vector member (state)
-      state_pred << ((cur_sig(2) / cur_sig(4)) * (sin(cur_sig(3) + (cur_sig(4) * delta_t)) - sin(cur_sig(3)))),
-                    ((cur_sig(2) / cur_sig(4)) * (-cos(cur_sig(3) + (cur_sig(4) * delta_t)) + cos(cur_sig(3)))),
+      state_pred << ((cur_sig(2) / cur_sig(4)) * (sin(cur_sig(3) + (cur_sig(4) * delta_t_in)) - sin(cur_sig(3)))),
+                    ((cur_sig(2) / cur_sig(4)) * (-cos(cur_sig(3) + (cur_sig(4) * delta_t_in)) + cos(cur_sig(3)))),
                     0,
-                    cur_sig(4) * delta_t,
+                    cur_sig(4) * delta_t_in,
                     0;
       //compute the process model transformation for each vector member (noise)
-      noise_pred << (((delta_t * delta_t) * cos(cur_sig(3)) * (Xsig_aug.col(i))(5)) / 2),
-                    (((delta_t * delta_t) * sin(cur_sig(3)) * (Xsig_aug.col(i))(5)) / 2),
-                    delta_t * (Xsig_aug.col(i))(5),
-                    (((delta_t * delta_t) * (Xsig_aug.col(i))(6)) / 2),
-                    delta_t * (Xsig_aug.col(i))(6);
+      noise_pred << ((delta_t_squared * cos(cur_sig(3)) * (Xsig_aug_in.col(i))(5)) / 2),
+                    ((delta_t_squared * sin(cur_sig(3)) * (Xsig_aug_in.col(i))(5)) / 2),
+                    delta_t_in * (Xsig_aug_in.col(i))(5),
+                    ((delta_t_squared * (Xsig_aug_in.col(i))(6)) / 2),
+                    delta_t_in * (Xsig_aug_in.col(i))(6);
       //compute the new state for the current column
       Xsig_pred.col(i) = cur_sig + state_pred + noise_pred;
   }
@@ -380,76 +317,30 @@ void UKF::SigmaPointPrediction(MatrixXd* Xsig_out) {
 }
 
 
-void UKF::PredictMeanAndCovariance(VectorXd* x_out, MatrixXd* P_out) {
-
-  //set state dimension
-  int n_x = 5;
-
-  //set augmented dimension
-  int n_aug = 7;
-
-  //define spreading parameter
-  double lambda = 3 - n_aug;
-
-  //create example matrix with predicted sigma points
-  MatrixXd Xsig_pred = MatrixXd(n_x, 2 * n_aug + 1);
-  Xsig_pred <<
-         5.9374,  6.0640,   5.925,  5.9436,  5.9266,  5.9374,  5.9389,  5.9374,  5.8106,  5.9457,  5.9310,  5.9465,  5.9374,  5.9359,  5.93744,
-           1.48,  1.4436,   1.660,  1.4934,  1.5036,    1.48,  1.4868,    1.48,  1.5271,  1.3104,  1.4787,  1.4674,    1.48,  1.4851,    1.486,
-          2.204,  2.2841,  2.2455,  2.2958,   2.204,   2.204,  2.2395,   2.204,  2.1256,  2.1642,  2.1139,   2.204,   2.204,  2.1702,   2.2049,
-         0.5367, 0.47338, 0.67809, 0.55455, 0.64364, 0.54337,  0.5367, 0.53851, 0.60017, 0.39546, 0.51900, 0.42991, 0.530188,  0.5367, 0.535048,
-          0.352, 0.29997, 0.46212, 0.37633,  0.4841, 0.41872,   0.352, 0.38744, 0.40562, 0.24347, 0.32926,  0.2214, 0.28687,   0.352, 0.318159;
-
-  //create vector for weights
-  VectorXd weights = VectorXd(2*n_aug+1);
-
+void UKF::PredictMeanAndCovariance(MatrixXd& Xsig_pred_in, VectorXd* x_out, MatrixXd* P_out)
+{
   //create vector for predicted state
-  VectorXd x = VectorXd(n_x);
+  VectorXd x = VectorXd(n_x_);
 
   //create covariance matrix for prediction
-  MatrixXd P = MatrixXd(n_x, n_x);
-
-
-/*******************************************************************************
- * Student part begin
- ******************************************************************************/
-
-  //init weights
-  weights.fill(1 / (2 * (lambda + n_aug)));  //set all elements
-  weights(0) = lambda / (lambda + n_aug);    //set first element differently
+  MatrixXd P = MatrixXd(n_x_, n_x_);
 
   //predict state mean
   //multiply the weights with each element in the predicted sigma points matrix
   //then do a row-wise sum of the resulting matrix so that a summed vector is returned
-  x = (Xsig_pred * weights).rowwise().sum();
+  x_ = (Xsig_pred_in * weights_).rowwise().sum();
 
   //predict state covariance matrix
   //set to zeros
   P.fill(0);
   //subtract the x vector from each column of Xsig_pred
-  MatrixXd mean_subtracted = Xsig_pred.colwise() - x;
+  MatrixXd mean_subtracted = Xsig_pred_in.colwise() - x_;
 
   //sum the individual 5x5's
-  for (int i = 0; i < 2*n_aug+1; i++)
+  for (int i = 0; i < (2 * n_aug_) + 1; i++)
   {
-       P += weights(i) * mean_subtracted.col(i) * (mean_subtracted.col(i)).transpose();
+       P += weights_(i) * mean_subtracted.col(i) * (mean_subtracted.col(i)).transpose();
   }
-
-  //P = weights(0) * mean_subtracted.col(0) * (mean_subtracted.col(0)).transpose();
-
-  //MatrixXd test =  mean_subtracted.colwise() * weights; //* mean_subtracted.transpose();
-
-  //std::cout << test << std::endl << std::endl;
-
-  //next multiply the weight vector by each row of the mean_subtracted matrix
-  //MatrixXd weights_multiplied = mean_subtracted * weights;
-  //P = (weights_multiplied * weights_multiplied.transpose()).colwise().sum();
-  //P = weights_multiplied * mean_subtracted.transpose();
-  //P = weights * (mean_subtracted * mean_subtracted.transpose());
-
-/*******************************************************************************
- * Student part end
- ******************************************************************************/
 
   //print result
   std::cout << "Predicted state" << std::endl;
@@ -462,24 +353,13 @@ void UKF::PredictMeanAndCovariance(VectorXd* x_out, MatrixXd* P_out) {
   *P_out = P;
 }
 
+//predict measurement mean and covariance for radar
+void UKF::PredictRadarMeasurement(VectorXd* z_out, MatrixXd* S_out)
+{
+    //set measurement dimension, radar can measure r, phi, and r_dot
+    int n_z = 3;
 
-void UKF::PredictRadarMeasurement(VectorXd* z_out, MatrixXd* S_out) {
-
-  //set state dimension
-  int n_x = 5;
-
-  //set augmented dimension
-  int n_aug = 7;
-
-  //set measurement dimension, radar can measure r, phi, and r_dot
-  int n_z = 3;
-
-  //define spreading parameter
-  double lambda = 3 - n_aug;
-
-  //set vector for weights
-  VectorXd weights = VectorXd(2*n_aug+1);
-  //init weights
+    //init weights
   weights.fill(1 / (2 * (lambda + n_aug)));  //set all elements
   weights(0) = lambda / (lambda + n_aug);    //set first element differently
 
