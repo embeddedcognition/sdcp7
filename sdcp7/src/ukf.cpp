@@ -60,7 +60,7 @@ UKF::~UKF() {}
 void UKF::ProcessMeasurement(const MeasurementPackage& measurement_pack)
 {
     //local vars
-    double delta_t_;    //elapsed time between the current and previous measurements (in seconds)
+    double delta_t;    //elapsed time between the current and previous measurements (in seconds)
 
     //if this is the first time, we need to initialize x with the current measurement,
     //then exit (filtering will start with the next iteration)
@@ -72,52 +72,46 @@ void UKF::ProcessMeasurement(const MeasurementPackage& measurement_pack)
     }
 
     //compute the time elapsed between the current and previous measurements (in seconds)
-    delta_t_ = (measurement_pack.timestamp_ - previous_timestamp_) / 1000000.0;
+    delta_t = (measurement_pack.timestamp_ - previous_timestamp_) / 1000000.0;
 
     //capture the timestamp of the measurement for future use
     previous_timestamp_ = measurement_pack.timestamp_;
 
-    //update the state transition matrix (F) according to the new elapsed time
-    kf_.UpdateStateTransitionMatrix(dt);
-
-    //update the process (noise) covariance matrix according to the new elapsed time
-    kf_.UpdateProcessCovarianceMatrix(dt);
-
     //perform kalman prediction step
-    kf_.PerformPredict();
+    PerformPrediction(delta_t);
 
-    //perform kalman update step
+    //transform the predicted state into the measurement space
     if (measurement_pack.sensor_type_ == MeasurementPackage::RADAR)
     {
-        //compute the jacobian
-        VectorXd x_state = kf_.GetState();
-        Hj_ = tools_.ComputeJacobian(x_state);
-        //set the appropriate H & R matrices based upon the sensor type
-        kf_.SetMeasurementMatrices(Hj_, R_radar_);
-        //for radar, use extended kalman filter equations
-        kf_.PerformUpdateEKF(measurement_pack.raw_measurements_);
+        //predict radar measurement
     }
     else
     {
-        //set the appropriate H & R matrices based upon the sensor type
-        kf_.SetMeasurementMatrices(H_laser_, R_laser_);
-        //for lidar, use normal kalman filter equations
-        kf_.PerformUpdate(measurement_pack.raw_measurements_);
+        //predict lidar measurement
     }
 
+    //now that we have a predicted mean and covariance for the specific measurement space (radar or lidar), we can perform the kalman update step
+    //calculating the resulting mean and covariance of the predicted measurement
+    //UpdateState()
+
     // print the output
-    //cout << "x_ = " << kf_.GetState() << endl;
-    //cout << "P_ = " << kf_.GetStateCovariance() << endl;
+    cout << "x_ = " << x_ << endl;
+    cout << "P_ = " << P_ << endl;
 }
 
 //perform kalman prediction step
-void UKF::Prediction(const double delta_t)
+void UKF::PerformPrediction(const double delta_t)
 {
-    //generate sigma points
+    //local vars
+    MatrixXd Xsig;  //augmented sigma points
 
-    //predict sigma points
+    //represent the uncertainty of the posterior state estimation with sigma points
+    //augmented sigma points include state + process noise
+    ComputeAugmentedSigmaPoints(&Xsig);
 
-    //predict the state and state covariance matrix
+    //predict sigma points (by inserting each augmented sigma point into the CTRV process model)
+
+    //compute the mean and covariance of the predicted state
 }
 
 /**
@@ -261,7 +255,7 @@ void UKF::ComputeAugmentedSigmaPoints(MatrixXd* Xsig_out)
     }
 
     //print result
-    std::cout << "Xsig_aug = " << std::endl << Xsig_aug << std::endl;
+    //std::cout << "Xsig_aug = " << std::endl << Xsig_aug << std::endl;
 
     //write result
     *Xsig_out = Xsig_aug;

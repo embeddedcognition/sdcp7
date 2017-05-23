@@ -40,17 +40,6 @@ class UKF
         void ProcessMeasurement(const MeasurementPackage& measurement_pack);
 
     private:
-        //normalize the supplied angle to be within -pi to pi
-        double NormalizeAngle(const double angle);
-        //function that handles first time init
-        void FirstTimeInit(const MeasurementPackage& measurement_pack);
-        //generate the augmented sigma points
-        void ComputeAugmentedSigmaPoints(MatrixXd* Xsig_out);
-        void SigmaPointPrediction(MatrixXd& Xsig_aug_in, const double delta_t_in, MatrixXd* Xsig_out);
-        void PredictMeanAndCovariance(MatrixXd& Xsig_pred_in, VectorXd* x_out, MatrixXd* P_out);
-        void PredictRadarMeasurement(VectorXd* z_out, MatrixXd* S_out);
-        void UpdateState(VectorXd* x_out, MatrixXd* P_out);
-
         ///* initially set to false, set to true in first call of ProcessMeasurement
         bool is_initialized_;
 
@@ -105,12 +94,8 @@ class UKF
         //PI
         const double PI;
 
-        /**
-         * Prediction Predicts sigma points, the state, and the state covariance
-         * matrix
-         * @param delta_t Time between k and k+1 in s
-         */
-        void Prediction(double delta_t);
+        //perform unscented kalman prediciton steps
+        void PerformPrediction(double delta_t);
 
         /**
          * Updates the state and the state covariance matrix using a laser measurement
@@ -123,6 +108,17 @@ class UKF
          * @param meas_package The measurement at k+1
          */
         void UpdateRadar(const MeasurementPackage& measurement_pack);
+
+        //normalize the supplied angle to be within -pi to pi
+        double NormalizeAngle(const double angle);
+        //function that handles first time init
+        void FirstTimeInit(const MeasurementPackage& measurement_pack);
+        //generate the augmented sigma points
+        void ComputeAugmentedSigmaPoints(MatrixXd* Xsig_out);
+        void SigmaPointPrediction(MatrixXd& Xsig_aug_in, const double delta_t_in, MatrixXd* Xsig_out);
+        void PredictMeanAndCovariance(MatrixXd& Xsig_pred_in, VectorXd* x_out, MatrixXd* P_out);
+        void PredictRadarMeasurement(VectorXd* z_out, MatrixXd* S_out);
+        void UpdateState(VectorXd* x_out, MatrixXd* P_out);
 };
 
 #endif /* UKF_H */
