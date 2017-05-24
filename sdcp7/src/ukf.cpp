@@ -100,16 +100,21 @@ void UKF::ProcessMeasurement(const MeasurementPackage& measurement_pack)
 }
 
 //perform kalman prediction step
+//at this point we have the posterior mean state and covariance matrix from the last iteration (representing distribution of current state)
+//the model we're using (CTRV) has a state vector of size 5
 void UKF::PerformPrediction(const double delta_t)
 {
     //local vars
-    MatrixXd Xsig;  //augmented sigma points
+    MatrixXd Xsig_aug;      //augmented sigma points (augmented state)
+    MatrixXd Xsig_pred;     //predicted sigma points (predicted state)
 
     //represent the uncertainty of the posterior state estimation with sigma points
-    //augmented sigma points include state + process noise
-    ComputeAugmentedSigmaPoints(&Xsig);
+    //the augmented state includes the noise vector (last two elements)
+    //first sigma point is always the mean state estimate
+    ComputeAugmentedSigmaPoints(&Xsig_aug);
 
     //predict sigma points (by inserting each augmented sigma point into the CTRV process model)
+    PredictSigmaPoints(Xsig_aug, delta_t, &Xsig_pred);
 
     //compute the mean and covariance of the predicted state
 }
@@ -169,10 +174,10 @@ void UKF::FirstTimeInit(const MeasurementPackage& measurement_pack)
     //local vars
     //for laser: col_1 will equal px and col_2 will equal py
     //for radar: col_1 will equal r (e.g., rho) and col_2 will equal θ (e.g., phi)
-    float col_1 = measurement_pack.raw_measurements_(0);
-    float col_2 = measurement_pack.raw_measurements_(1);
-    float px; //x position
-    float py; //y position
+    double col_1 = measurement_pack.raw_measurements_(0);
+    double col_2 = measurement_pack.raw_measurements_(1);
+    double px; //x position
+    double py; //y position
 
     //if this is radar data
     if (measurement_pack.sensor_type_ == MeasurementPackage::RADAR)
@@ -209,8 +214,10 @@ void UKF::FirstTimeInit(const MeasurementPackage& measurement_pack)
 }
 
 //create augmented sigma points
+//allows us to represent the uncertainty of the covariance matrix Q with sigma points
 void UKF::ComputeAugmentedSigmaPoints(MatrixXd* Xsig_out)
 {
+    //local vars
     MatrixXd Q = MatrixXd(2, 2);                                //process noise covariance matrix
     VectorXd x_aug = VectorXd(7);                               //augmented mean vector
     MatrixXd P_aug = MatrixXd(7, 7);                            //augmented state covariance
@@ -246,10 +253,12 @@ void UKF::ComputeAugmentedSigmaPoints(MatrixXd* Xsig_out)
     //populate the augmented mean
     Xsig_aug.col(0) = x_aug;
 
-    //populate the "right" (positive) and "left" (negative) sigma points at the same time
+    //populate the sigma points
     for (int i = 0; i < sqrt_total.cols(); i++)
     {
+        //sigma points to the right of the mean state (directionally)
         Xsig_aug.col(Xsig_aug_index) = x_aug + sqrt_total.col(i);
+        //sigma points to the left of the mean (directionally)
         Xsig_aug.col(Xsig_aug_index + sqrt_total.cols()) = x_aug - sqrt_total.col(i);
         Xsig_aug_index++;
     }
@@ -261,60 +270,73 @@ void UKF::ComputeAugmentedSigmaPoints(MatrixXd* Xsig_out)
     *Xsig_out = Xsig_aug;
 }
 
-void UKF::SigmaPointPrediction(MatrixXd& Xsig_aug_in, const double delta_t_in, MatrixXd* Xsig_out)
+//predict sigma points
+void UKF::PredictSigmaPoints(MatrixXd& Xsig_aug_in, const double delta_t_in, MatrixXd* Xsig_out)
 {
-    //create matrix with predicted sigma points as columns
-     MatrixXd Xsig_pred = MatrixXd(n_x_, (2 * n_aug_) + 1);
-  VectorXd state_pred = VectorXd(n_x_);
-  VectorXd noise_pred = VectorXd(n_x_);
-  VectorXd cur_sig;
-  double delta_t_squared = delta_t_in * delta_t_in;
+    //local vars
+    MatrixXd Xsig_pred = MatrixXd(n_x_, (2 * n_aug_) + 1);  //create matrix with predicted sigma points as columns
+    VectorXd state_pred = VectorXd(n_x_);                   //predicted state (calculated via the CTRV model)
+    VectorXd noise_pred = VectorXd(n_x_);                   //predicted noise (calculated via the CTRV model)
+    double delta_t_squared = delta_t_in * delta_t_in;       //delta_t squared is a multi-use operation (so we compute it once)
+    double px, py, v, yaw, yaw_dot, nu_a, nu_yaw_dot_dot;   //used to hold current sigma point column values
+    double predicted_px, predicted_py;                      //used to hold predicted px and py values
 
-  //predict sigma points
-  //process each sigma point prediction
-  for (int i = 0; i < Xsig_aug_in.cols(); i++)
-  {
-      //get a handle to the first 5 elelments of the current sigma point
-      cur_sig = (Xsig_aug_in.col(i)).head(5);
-      //compute the process model transformation for each vector member (state)
-      state_pred << ((cur_sig(2) / cur_sig(4)) * (sin(cur_sig(3) + (cur_sig(4) * delta_t_in)) - sin(cur_sig(3)))),
-                    ((cur_sig(2) / cur_sig(4)) * (-cos(cur_sig(3) + (cur_sig(4) * delta_t_in)) + cos(cur_sig(3)))),
-                    0,
-                    cur_sig(4) * delta_t_in,
-                    0;
-      //compute the process model transformation for each vector member (noise)
-      noise_pred << ((delta_t_squared * cos(cur_sig(3)) * (Xsig_aug_in.col(i))(5)) / 2),
-                    ((delta_t_squared * sin(cur_sig(3)) * (Xsig_aug_in.col(i))(5)) / 2),
-                    delta_t_in * (Xsig_aug_in.col(i))(5),
-                    ((delta_t_squared * (Xsig_aug_in.col(i))(6)) / 2),
-                    delta_t_in * (Xsig_aug_in.col(i))(6);
-      //compute the new state for the current column
-      Xsig_pred.col(i) = cur_sig + state_pred + noise_pred;
-  }
-  //avoid division by zero
-  //write predicted sigma points into right column
+    //predict sigma points
+    //process each sigma point prediction
+    for (int i = 0; i < Xsig_aug_in.cols(); i++)
+    {
+        //extract augmented state column values for easier handling/tracking
+        px = Xsig_aug_in(0, i);
+        py = Xsig_aug_in(1, i);
+        v = Xsig_aug_in(2, i);
+        yaw = Xsig_aug_in(3, i);
+        yaw_dot = Xsig_aug_in(4, i);
+        nu_a = Xsig_aug_in(5, i);
+        nu_yaw_dot_dot = Xsig_aug_in(6, i);
 
-  //######### need to deal with the case when psi dot is zero ##########
+        //deal with potential of yaw_dot being zero in computing state prediction
+        if (fabs(yaw_dot) > 0.0001)
+        {
+            //compute predicted px and py via CTRV when yaw_dot is greater than zero
+            predicted_px = (v / yaw_dot) * (sin(yaw + (yaw_dot * delta_t_in)) - sin(yaw));
+            predicted_py = (v / yaw_dot) * (-cos(yaw + (yaw_dot * delta_t_in)) + cos(yaw));
+        }
+        else
+        {
+            //compute predicted px and py via CTRV when yaw_dot is zero
+            predicted_px = v * cos(yaw) * delta_t_in;
+            predicted_py = v * sin(yaw) * delta_t_in;
+        }
 
+        //compute the process model transformation for each vector member (state)
+        state_pred << predicted_px,
+                      predicted_py,
+                      0,
+                      yaw_dot * delta_t_in,
+                      0;
+        //compute the process model transformation for each vector member (noise)
+        noise_pred << (delta_t_squared * cos(yaw) * nu_a) / 2,
+                      (delta_t_squared * sin(yaw) * nu_a) / 2,
+                      delta_t_in * nu_a,
+                      (delta_t_squared * nu_yaw_dot_dot) / 2,
+                      delta_t_in * nu_yaw_dot_dot;
 
+        //populate process model state elements from current sigma point column (i.e., extract first 5 elements of current sigma point column as they align with the process model specification)
+        Xsig_pred.col(i) << px, py, v, yaw, yaw_dot;
 
-/*******************************************************************************
- * Student part end
- ******************************************************************************/
+        //add sum of state and noise prediction to the current state values to make up the new state
+        Xsig_pred.col(i) += (state_pred + noise_pred);
+    }
 
-  //print result
-  std::cout << "Xsig_pred = " << std::endl << Xsig_pred << std::endl;
-
-  //write result
-  *Xsig_out = Xsig_pred;
-
+    //write result
+    *Xsig_out = Xsig_pred;
 }
 
 
 void UKF::PredictMeanAndCovariance(MatrixXd& Xsig_pred_in, VectorXd* x_out, MatrixXd* P_out)
 {
-  //create vector for predicted state
-  VectorXd x = VectorXd(n_x_);
+    //local vars
+    VectorXd x = VectorXd(n_x_);    //create vector for predicted state
 
   //create covariance matrix for prediction
   MatrixXd P = MatrixXd(n_x_, n_x_);
