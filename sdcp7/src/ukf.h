@@ -27,13 +27,13 @@ class UKF
         //destructor
         virtual ~UKF();
 
-        ///* state vector: [pos1 pos2 vel_abs yaw_angle yaw_rate] in SI units and rad
+        //state vector: [pos1 pos2 vel_abs yaw_angle yaw_rate] in SI units and rad
         VectorXd x_;
 
-        ///* the current NIS for radar
+        //the current NIS for radar
         double NIS_radar_;
 
-        ///* the current NIS for laser
+        //the current NIS for laser
         double NIS_laser_;
 
         //process the latest measurement received from the sensor
@@ -49,13 +49,13 @@ class UKF
         ///* if this is false, radar measurements will be ignored (except for init)
         bool use_radar_;
 
-        ///* state covariance matrix
+        //state covariance matrix
         MatrixXd P_;
 
-        ///* predicted sigma points matrix
+        //predicted sigma points matrix
         MatrixXd Xsig_pred_;
 
-        ///* Weights of sigma points
+        //weights of sigma points
         VectorXd weights_;
 
         //previous timestamp
@@ -116,9 +116,9 @@ class UKF
         //generate the augmented sigma points
         void ComputeAugmentedSigmaPoints(MatrixXd* Xsig_out);
         //predict sigma points by pushing the augmented state through the CTRV model
-        void PredictSigmaPoints(MatrixXd& Xsig_aug_in, const double delta_t_in, MatrixXd* Xsig_out);
+        void PredictSigmaPoints(MatrixXd& Xsig_aug_in, const double delta_t_in);
 
-        void PredictMeanAndCovariance(MatrixXd& Xsig_pred_in, VectorXd* x_out, MatrixXd* P_out);
+        void ComputeMeanAndCovarianceofPredictedSigmaPoints();
         void PredictRadarMeasurement(VectorXd* z_out, MatrixXd* S_out);
         void UpdateState(VectorXd* x_out, MatrixXd* P_out);
 };
