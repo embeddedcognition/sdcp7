@@ -111,16 +111,27 @@ class UKF
 
         //normalize the supplied angle to be within -pi to pi
         double NormalizeAngle(const double angle);
+
         //function that handles first time init
         void FirstTimeInit(const MeasurementPackage& measurement_pack);
+
         //generate the augmented sigma points
         void ComputeAugmentedSigmaPoints(MatrixXd* Xsig_out);
+
         //predict sigma points by pushing the augmented state through the CTRV model
         void PredictSigmaPoints(MatrixXd& Xsig_aug_in, const double delta_t_in);
 
+        //last step in delivering the new predicted state and covariance, we need to compute the mean and covariance of the predicted state
         void ComputeMeanAndCovarianceofPredictedSigmaPoints();
-        void PredictRadarMeasurement(VectorXd* z_out, MatrixXd* S_out);
-        void UpdateState(VectorXd* x_out, MatrixXd* P_out);
+
+        //transform the predicted state into the radar measurement space and then predict measurement mean and covariance
+        void PredictRadarMeasurement(const int& n_z_in, VectorXd* z_pred_out, MatrixXd* S_out, MatrixXd* Zsig_out);
+
+        //transform the predicted state into the lidar measurement space and then predict measurement mean and covariance
+        void PredictLidarMeasurement(const int& n_z_in, VectorXd* z_pred_out, MatrixXd* S_out, MatrixXd* Zsig_out);
+
+        //final step for this iteration, update the predicted state and covariance using the radar/lidar measurement
+        void UpdateState(const VectorXd& z_in, const VectorXd& z_pred_in, const MatrixXd& Zsig_in, const MatrixXd& S_in, const int& n_z_in);
 };
 
 #endif /* UKF_H */
