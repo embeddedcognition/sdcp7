@@ -117,10 +117,7 @@ void UKF::PerformPrediction(const double delta_t)
     ComputeMeanAndCovarianceofPredictedSigmaPoints();
 }
 
-/**
- * Updates the state and the state covariance matrix using a laser measurement.
- * @param {MeasurementPackage} meas_package
- */
+//update state and covariance using lidar measurement
 void UKF::UpdateLidar(const MeasurementPackage& measurement_pack)
 {
   /**
@@ -133,12 +130,13 @@ void UKF::UpdateLidar(const MeasurementPackage& measurement_pack)
   */
 }
 
-/**
- * Updates the state and the state covariance matrix using a radar measurement.
- * @param {MeasurementPackage} meas_package
- */
+//update state and covariance using radar measurement
 void UKF::UpdateRadar(const MeasurementPackage& measurement_pack)
 {
+    //local vars
+    MatrixXd S; //measurement noise covariance
+
+
   /**
   TODO:
 
@@ -151,6 +149,8 @@ void UKF::UpdateRadar(const MeasurementPackage& measurement_pack)
     //now that we have a predicted mean and covariance for the specific measurement space (radar or lidar), we can perform the kalman update step
     //calculating the resulting mean and covariance of the predicted measurement
     //UpdateState()
+
+    UpdateState(measurement_pack.raw_measurements_, )
 }
 
 //normalize the supplied angle to be within -pi to pi
@@ -217,7 +217,7 @@ void UKF::FirstTimeInit(const MeasurementPackage& measurement_pack)
 
 //create augmented sigma points
 //allows us to represent the uncertainty of the covariance matrix Q with sigma points
-void UKF::ComputeAugmentedSigmaPoints(MatrixXd* Xsig_out)
+void UKF::ComputeAugmentedSigmaPoints(MatrixXd* Xsig_aug_out)
 {
     //local vars
     MatrixXd Q = MatrixXd(2, 2);                                //process noise covariance matrix
@@ -265,8 +265,8 @@ void UKF::ComputeAugmentedSigmaPoints(MatrixXd* Xsig_out)
         Xsig_aug_index++;
     }
 
-    //output result
-    *Xsig_out = Xsig_aug;
+    //output augmented sigma points
+    *Xsig_aug_out = Xsig_aug;
 }
 
 //perform k + 1 prediction using augmented sigma points
@@ -323,7 +323,7 @@ void UKF::PredictSigmaPoints(MatrixXd& Xsig_aug_in, const double delta_t_in)
         //populate process model state elements from current sigma point column (i.e., extract first 5 elements of current sigma point column as they align with the process model specification)
         Xsig_pred_.col(i) << px, py, v, yaw, yaw_dot;
 
-        //add sum of state and noise prediction to the current state values to make up the new state
+        //add sum of state and noise prediction to the current state values to make up the new state (stored in a global var Xsig_pred_)
         Xsig_pred_.col(i) += (state_pred + noise_pred);
     }
 }
@@ -333,7 +333,7 @@ void UKF::ComputeMeanAndCovarianceofPredictedSigmaPoints()
 {
     //predict state mean
     //multiply the weights with each element in the predicted sigma points matrix
-    //then do a row-wise sum of the resulting matrix so that a summed vector is returned
+    //then do a row-wise sum of the resulting matrix so that a summed vector is returned (stored in a global var x_)
     x_ = (Xsig_pred_ * weights_).rowwise().sum();
 
     //predict state covariance matrix
@@ -342,7 +342,7 @@ void UKF::ComputeMeanAndCovarianceofPredictedSigmaPoints()
     //subtract the x vector from each column of Xsig_pred
     MatrixXd mean_subtracted = Xsig_pred_.colwise() - x_;
 
-    //sum the individual 5x5's
+    //sum the individual 5x5's, result is stored in a global var P_)
     for (int i = 0; i < (2 * n_aug_) + 1; i++)
     {
         P_ += weights_(i) * mean_subtracted.col(i) * (mean_subtracted.col(i)).transpose();
@@ -350,7 +350,7 @@ void UKF::ComputeMeanAndCovarianceofPredictedSigmaPoints()
 }
 
 //transform the predicted state into the radar measurement space and then predict measurement mean and covariance
-void UKF::PredictRadarMeasurement(VectorXd* z_out, MatrixXd* S_out)
+void UKF::PredictRadarMeasurement(VectorXd* z_pred_out, MatrixXd* S_out)
 {
     //set measurement dimension, radar can measure r, phi, and r_dot
     int n_z = 3;
@@ -415,79 +415,16 @@ void UKF::PredictRadarMeasurement(VectorXd* z_out, MatrixXd* S_out)
   //add the noise matrix to the covariance matrix
   S += R;
 
-  //write result
-  *z_out = z_pred;
+  //output predicted measurement mean and covariance
+  *z_pred_out = z_pred;
   *S_out = S;
 }
 
 
-void UKF::UpdateState(VectorXd* x_out, MatrixXd* P_out) {
-
-  //set state dimension
-  int n_x = 5;
-
-  //set augmented dimension
-  int n_aug = 7;
-
+void UKF::UpdateState(const VectorXd& z_in, const VectorXd z_pred_in, const )
+{
   //set measurement dimension, radar can measure r, phi, and r_dot
   int n_z = 3;
-
-  //define spreading parameter
-  double lambda = 3 - n_aug;
-
-  //set vector for weights
-  VectorXd weights = VectorXd(2*n_aug+1);
-  //init weights
-  weights.fill(1 / (2 * (lambda + n_aug)));  //set all elements
-  weights(0) = lambda / (lambda + n_aug);    //set first element differently
-
-  //create example matrix with predicted sigma points in state space
-  MatrixXd Xsig_pred = MatrixXd(n_x, 2 * n_aug + 1);
-  Xsig_pred <<
-         5.9374,  6.0640,   5.925,  5.9436,  5.9266,  5.9374,  5.9389,  5.9374,  5.8106,  5.9457,  5.9310,  5.9465,  5.9374,  5.9359,  5.93744,
-           1.48,  1.4436,   1.660,  1.4934,  1.5036,    1.48,  1.4868,    1.48,  1.5271,  1.3104,  1.4787,  1.4674,    1.48,  1.4851,    1.486,
-          2.204,  2.2841,  2.2455,  2.2958,   2.204,   2.204,  2.2395,   2.204,  2.1256,  2.1642,  2.1139,   2.204,   2.204,  2.1702,   2.2049,
-         0.5367, 0.47338, 0.67809, 0.55455, 0.64364, 0.54337,  0.5367, 0.53851, 0.60017, 0.39546, 0.51900, 0.42991, 0.530188,  0.5367, 0.535048,
-          0.352, 0.29997, 0.46212, 0.37633,  0.4841, 0.41872,   0.352, 0.38744, 0.40562, 0.24347, 0.32926,  0.2214, 0.28687,   0.352, 0.318159;
-
-  //create example vector for predicted state mean
-  VectorXd x = VectorXd(n_x);
-  x <<
-     5.93637,
-     1.49035,
-     2.20528,
-    0.536853,
-    0.353577;
-
-  //create example matrix for predicted state covariance
-  MatrixXd P = MatrixXd(n_x,n_x);
-  P <<
-  0.0054342,  -0.002405,  0.0034157, -0.0034819, -0.00299378,
-  -0.002405,    0.01084,   0.001492,  0.0098018,  0.00791091,
-  0.0034157,   0.001492,  0.0058012, 0.00077863, 0.000792973,
- -0.0034819,  0.0098018, 0.00077863,   0.011923,   0.0112491,
- -0.0029937,  0.0079109, 0.00079297,   0.011249,   0.0126972;
-
-  //create example matrix with sigma points in measurement space
-  MatrixXd Zsig = MatrixXd(n_z, 2 * n_aug + 1);
-  Zsig <<
-      6.1190,  6.2334,  6.1531,  6.1283,  6.1143,  6.1190,  6.1221,  6.1190,  6.0079,  6.0883,  6.1125,  6.1248,  6.1190,  6.1188,  6.12057,
-     0.24428,  0.2337, 0.27316, 0.24616, 0.24846, 0.24428, 0.24530, 0.24428, 0.25700, 0.21692, 0.24433, 0.24193, 0.24428, 0.24515, 0.245239,
-      2.1104,  2.2188,  2.0639,   2.187,  2.0341,  2.1061,  2.1450,  2.1092,  2.0016,   2.129,  2.0346,  2.1651,  2.1145,  2.0786,  2.11295;
-
-  //create example vector for mean predicted measurement
-  VectorXd z_pred = VectorXd(n_z);
-  z_pred <<
-      6.12155,
-     0.245993,
-      2.10313;
-
-  //create example matrix for predicted measurement covariance
-  MatrixXd S = MatrixXd(n_z,n_z);
-  S <<
-      0.0946171, -0.000139448,   0.00407016,
-   -0.000139448,  0.000617548, -0.000770652,
-     0.00407016, -0.000770652,    0.0180917;
 
   //create example vector for incoming radar measurement
   VectorXd z = VectorXd(n_z);
@@ -505,30 +442,18 @@ void UKF::UpdateState(VectorXd* x_out, MatrixXd* P_out) {
 
   //calculate cross correlation matrix
   MatrixXd Xmean_subtracted = Xsig_pred.colwise() - x;
-  MatrixXd Zmean_subtracted = (Zsig.colwise() - z_pred).transpose();
+  MatrixXd Zmean_subtracted = (Zsig.colwise() - z_pred_in).transpose();
   Tc.fill(0); //init to zeros as we're adding to existing values
   //sum the individual matrices
   for (int i = 0; i < 2 * n_aug + 1; i++)
   {
-       Tc += weights(i) * Xmean_subtracted.col(i) * Zmean_subtracted.row(i);
+       Tc += weights_(i) * Xmean_subtracted.col(i) * Zmean_subtracted.row(i);
   }
 
-  //calculate Kalman gain K;
-  MatrixXd K = Tc * S.inverse();
+    //calculate Kalman gain K;
+    MatrixXd K = Tc * S.inverse();
 
-  //update state mean and covariance matrix
-  x += K * (z - z_pred);
-  P -= K * S * K.transpose();
-
-/*******************************************************************************
- * Student part end
- ******************************************************************************/
-
-  //print result
-  std::cout << "Updated state x: " << std::endl << x << std::endl;
-  std::cout << "Updated state covariance P: " << std::endl << P << std::endl;
-
-  //write result
-  *x_out = x;
-  *P_out = P;
+    //update state mean and covariance matrix
+    x_ += K * (z_in - z_pred_in);
+    P_ -= K * S * K.transpose();
 }
