@@ -76,16 +76,6 @@ void UKF::ProcessMeasurement(const MeasurementPackage& measurement_pack)
     //capture the timestamp of the measurement for the next iteration
     previous_timestamp_ = measurement_pack.timestamp_;
 
-    /*
-    while (delta_t > 0.1)
-    {
-        const double dt = 0.05;
-        //perform kalman prediction step
-        PerformPrediction(delta_t);
-        delta_t -= dt;
-    }
-    */
-
     //perform kalman prediction step
     PerformPrediction(delta_t);
 
