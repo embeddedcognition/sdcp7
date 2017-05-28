@@ -228,7 +228,7 @@ void UKF::ComputeAugmentedSigmaPoints(MatrixXd& Xsig_aug)
     MatrixXd P_aug = MatrixXd(7, 7);                            //augmented state covariance
 
     //compute augmented mean state
-    x_aug.head(x_.size()) << x_; //copy x into first 5 elements of x_aug
+    x_aug.head(x_.size()) = x_; //copy x into first 5 elements of x_aug
     x_aug(5) = 0; //copy mean value of acceleration noise
     x_aug(6) = 0; //copy mean value of acceleration noise
 
@@ -255,15 +255,15 @@ void UKF::ComputeAugmentedSigmaPoints(MatrixXd& Xsig_aug)
     int Xsig_aug_index = 1; //index starts at second column
 
     //populate the augmented mean
-    Xsig_aug.col(0) << x_aug;
+    Xsig_aug.col(0) = x_aug;
 
     //populate the sigma points
     for (int i = 0; i < sqrt_total.cols(); i++)
     {
         //sigma points to the right of the mean state (directionally)
-        Xsig_aug.col(Xsig_aug_index) << x_aug + sqrt_total.col(i);
+        Xsig_aug.col(Xsig_aug_index) = x_aug + sqrt_total.col(i);
         //sigma points to the left of the mean (directionally)
-        Xsig_aug.col(Xsig_aug_index + sqrt_total.cols()) << x_aug - sqrt_total.col(i);
+        Xsig_aug.col(Xsig_aug_index + sqrt_total.cols()) = x_aug - sqrt_total.col(i);
         Xsig_aug_index++;
     }
 }
@@ -336,7 +336,6 @@ void UKF::ComputeMeanAndCovarianceofPredictedSigmaPoints()
     //predict state mean
     //multiply the weights with each element in the predicted sigma points matrix
     //then do a row-wise sum of the resulting matrix so that a summed vector is returned (stored in a global var x_)
-    x_.fill(0);
     x_ << (Xsig_pred_ * weights_).rowwise().sum();
 
     //predict state covariance matrix
@@ -389,7 +388,7 @@ void UKF::PredictRadarMeasurement(const int& n_z, VectorXd& z_pred, MatrixXd& S,
     //compute mean predicted measurement
     //multiply the weights with each element in the measurement sigma points matrix
     //then do a row-wise sum of the resulting matrix so that a summed vector is returned
-    z_pred << (Zsig * weights_).rowwise().sum();
+    z_pred = (Zsig * weights_).rowwise().sum();
 
     //calculate measurement covariance matrix S
     //save time and space by computing the mean and transpose ahead of time
@@ -438,7 +437,7 @@ void UKF::PredictLidarMeasurement(const int& n_z, VectorXd& z_pred, MatrixXd& S,
     //compute mean predicted measurement
     //multiply the weights with each element in the measurement sigma points matrix
     //then do a row-wise sum of the resulting matrix so that a summed vector is returned
-    z_pred << (Zsig * weights_).rowwise().sum();
+    z_pred = (Zsig * weights_).rowwise().sum();
 
     //calculate measurement covariance matrix S
     //save time and space by computing the mean and transpose ahead of time
@@ -488,7 +487,15 @@ void UKF::UpdateState(const VectorXd& z, const VectorXd& z_pred, const MatrixXd&
     //compute Kalman gain K;
     MatrixXd K = Tc * S.inverse();
 
+    //compute error
+    VectorXd z_diff = z - z_pred;
+    //if we're updating based on a radar measurement, we need to normalize the angle phi
+    if (n_z == 3)
+    {
+        z_diff(1) = NormalizeAngle(z_diff(1));
+    }
+
     //update state mean and covariance matrix
-    x_ += K * (z - z_pred);
+    x_ += K * z_diff;
     P_ -= K * S * K.transpose();
 }
