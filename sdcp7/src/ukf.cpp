@@ -256,11 +256,12 @@ void UKF::UpdateRadar(const MeasurementPackage& measurement_pack)
     //ensure phi is between -pi and pi
     z_diff(1) = NormalizeAngle(z_diff(1));
 
+    //compute NIS
+    NIS_radar_ = z_diff.transpose() * S.inverse() * z_diff;
+
     //update state mean and covariance matrix
     x_ += K * z_diff;
     P_ -= K * S * K.transpose();
-
-    //compute radar NIS
 }
 
 //update state and covariance using lidar measurement
@@ -333,11 +334,12 @@ void UKF::UpdateLidar(const MeasurementPackage& measurement_pack)
     VectorXd z = measurement_pack.raw_measurements_;
     VectorXd z_diff = z - z_pred;
 
+    //compute NIS
+    NIS_laser_ = z_diff.transpose() * S.inverse() * z_diff;
+
     //update state mean and covariance matrix
     x_ += K * z_diff;
     P_ -= K * S * K.transpose();
-
-    //compute radar NIS
 }
 
 //create augmented sigma points
