@@ -494,3 +494,21 @@ double UKF::NormalizeAngle(const double angle)
 
     return normalized_angle;
 }
+
+//return the current state vector x --> (px, py, v, yaw, yaw_dot)
+VectorXd UKF::GetState()
+{
+    return x_;
+}
+
+//return NIS for radar
+double UKF::GetRadarNIS()
+{
+    return NIS_radar_;
+}
+
+//return NIS for laser
+double UKF::GetLaserNIS()
+{
+    return NIS_laser_;
+}

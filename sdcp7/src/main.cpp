@@ -134,24 +134,18 @@ int main(int argc, char* argv[])
         //start filtering from the second frame (the speed is unknown in the first frame)
         ukf.ProcessMeasurement(measurement_pack_list[k]);
 
-        //get state vector
-        //VectorXd x_state = ufk.GetState();
-
-        //output the estimation
-        //out_file_ << x_state(0) << "\t";
-        //out_file_ << x_state(1) << "\t";
-        //out_file_ << x_state(2) << "\t";
-        //out_file_ << x_state(3) << "\t";
+        //get x state vector
+        VectorXd x_state = ukf.GetState();
 
         // timestamp
         out_file_ << measurement_pack_list[k].timestamp_ << "\t"; // pos1 - est
 
         // output the state vector
-        out_file_ << ukf.x_(0) << "\t"; // pos1 - est
-        out_file_ << ukf.x_(1) << "\t"; // pos2 - est
-        out_file_ << ukf.x_(2) << "\t"; // vel_abs -est
-        out_file_ << ukf.x_(3) << "\t"; // yaw_angle -est
-        out_file_ << ukf.x_(4) << "\t"; // yaw_rate -est
+        out_file_ << x_state(0) << "\t"; // pos1 - est
+        out_file_ << x_state(1) << "\t"; // pos2 - est
+        out_file_ << x_state(2) << "\t"; // vel_abs -est
+        out_file_ << x_state(3) << "\t"; // yaw_angle -est
+        out_file_ << x_state(4) << "\t"; // yaw_rate -est
 
         //output the measurements
         if (measurement_pack_list[k].sensor_type_ == MeasurementPackage::LASER)
@@ -159,8 +153,11 @@ int main(int argc, char* argv[])
             //sensor type
             out_file_ << "lidar" << "\t";
 
+            //get NIS value
+            double nis_laser = ukf.GetLaserNIS();
+
             //NIS value
-            out_file_ << ukf.NIS_laser_ << "\t";
+            out_file_ << nis_laser << "\t";
 
             //output the lidar measurement
             out_file_ << measurement_pack_list[k].raw_measurements_(0) << "\t";
@@ -171,8 +168,11 @@ int main(int argc, char* argv[])
             //sensor type
             out_file_ << "radar" << "\t";
 
+            //get NIS value
+            double nis_radar = ukf.GetRadarNIS();
+
             //NIS value
-            out_file_ << ukf.NIS_radar_ << "\t";
+            out_file_ << nis_radar << "\t";
 
             //output the radar measurement in the cartesian coordinates
             float ro = measurement_pack_list[k].raw_measurements_(0);
@@ -190,10 +190,10 @@ int main(int argc, char* argv[])
         //convert ukf x vector to cartesian to compare to ground truth
         VectorXd ukf_x_cartesian_ = VectorXd(4);
 
-        float x_estimate_ = ukf.x_(0);
-        float y_estimate_ = ukf.x_(1);
-        float vx_estimate_ = ukf.x_(2) * cos(ukf.x_(3));
-        float vy_estimate_ = ukf.x_(2) * sin(ukf.x_(3));
+        float x_estimate_ = x_state(0);
+        float y_estimate_ = x_state(1);
+        float vx_estimate_ = x_state(2) * cos(x_state(3));
+        float vy_estimate_ = x_state(2) * sin(x_state(3));
 
         ukf_x_cartesian_ << x_estimate_, y_estimate_, vx_estimate_, vy_estimate_;
 

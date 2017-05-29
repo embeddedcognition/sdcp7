@@ -27,9 +27,21 @@ class UKF
         //destructor
         virtual ~UKF();
 
-        //state vector: px (position x), py (position y), v (speed or magnitude of velocity), yaw (orientation), yaw_dot (rate of change of orientation, if this is zero the vehicle is traveling in a straight line)
-        //in the CTRV model the velocity and yaw rate are constant
-        VectorXd x_;
+        //process the latest measurement received from the sensor
+        void ProcessMeasurement(const MeasurementPackage& measurement_pack);
+
+        //return the current state vector x --> (px, py, v, yaw, yaw_dot)
+        VectorXd GetState();
+
+        //return NIS for radar
+        double GetRadarNIS();
+
+        //return NIS for laser
+        double GetLaserNIS();
+
+    private:
+        ///* initially set to false, set to true in first call of ProcessMeasurement
+        bool is_initialized_;
 
         //the current NIS for radar
         double NIS_radar_;
@@ -37,12 +49,9 @@ class UKF
         //the current NIS for laser
         double NIS_laser_;
 
-        //process the latest measurement received from the sensor
-        void ProcessMeasurement(const MeasurementPackage& measurement_pack);
-
-    private:
-        ///* initially set to false, set to true in first call of ProcessMeasurement
-        bool is_initialized_;
+        //state vector: px (position x), py (position y), v (speed or magnitude of velocity), yaw (orientation), yaw_dot (rate of change of orientation, if this is zero the vehicle is traveling in a straight line)
+        //in the CTRV model the velocity and yaw rate are constant
+        VectorXd x_;
 
         //state covariance matrix
         MatrixXd P_;
