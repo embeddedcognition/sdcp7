@@ -95,20 +95,11 @@ class UKF
         //perform unscented kalman prediciton steps
         void PerformPrediction(const double delta_t);
 
-        /**
-         * Updates the state and the state covariance matrix using a radar measurement
-         * @param meas_package The measurement at k+1
-         */
+        //update state and covariance using radar measurement
         void UpdateRadar(const MeasurementPackage& measurement_pack);
 
-        /**
-         * Updates the state and the state covariance matrix using a laser measurement
-         * @param meas_package The measurement at k+1
-         */
+        //update state and covariance using lidar measurement
         void UpdateLidar(const MeasurementPackage& measurement_pack);
-
-        //normalize the supplied angle to be within -pi to pi
-        double NormalizeAngle(const double angle);
 
         //generate the augmented sigma points
         void ComputeAugmentedSigmaPoints(MatrixXd& Xsig_aug);
@@ -118,6 +109,9 @@ class UKF
 
         //last step in delivering the new predicted state and covariance, we need to compute the mean and covariance of the predicted state
         void ComputeMeanAndCovarianceofPredictedSigmaPoints();
+
+        //normalize the supplied angle to be within -pi to pi
+        double NormalizeAngle(const double angle);
 };
 
 #endif /* UKF_H */

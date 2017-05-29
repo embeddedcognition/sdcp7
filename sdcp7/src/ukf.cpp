@@ -60,11 +60,6 @@ void UKF::ProcessMeasurement(const MeasurementPackage& measurement_pack)
     if (!is_initialized_)
     {
         FirstTimeInit(measurement_pack);
-        cout << "Init start..." << endl;
-        cout << "x_ = " << x_ << endl;
-        cout << "P_ = " << P_ << endl;
-        cout << "weights_ = " << weights_ << endl;
-        cout << "Init complete..." << endl;
         //no need to predict or update so we return
         return;
     }
@@ -122,8 +117,7 @@ void UKF::FirstTimeInit(const MeasurementPackage& measurement_pack)
     }
 
     //init state vector x, which is in cartesian coordinates (px, py, v, psi, psi_dot)
-    //since we'll not have enough information to initialize the velocity portion of the state vector (vx and vy),
-    //i.e., we only have the current position to go on, we'll set it to zero
+    //first measurement, so position is the only valuable information
     x_ << px, py, 0, 0, 0;
 
     //init the matrix P to the identity matrix
@@ -143,9 +137,6 @@ void UKF::PerformPrediction(const double delta_t)
 {
     //local vars
     MatrixXd Xsig_aug = MatrixXd(n_aug_, (2 * n_aug_) + 1);     //augmented sigma point matrix (state + process noise)
-
-    //init
-    Xsig_aug.fill(0);
 
     //represent the uncertainty of the posterior state estimation with sigma points
     //the augmented state includes the noise vector (last two elements)
@@ -170,10 +161,9 @@ void UKF::UpdateRadar(const MeasurementPackage& measurement_pack)
     MatrixXd R = MatrixXd(n_z, n_z);                      //measurement noise matrix
     MatrixXd Tc = MatrixXd(n_x_, n_z);                    //create cross correlation matrix
     double px, py, v, yaw, rho, phi, rho_dot;             //used to extract particular values for easier handling
+    double normalized_angle; //used to normalize angles
 
-    //init
-    Zsig.fill(0);
-    z_pred.fill(0);
+    //init since we're summing against them
     S.fill(0);
     R.fill(0);
     Tc.fill(0);
@@ -219,23 +209,20 @@ void UKF::UpdateRadar(const MeasurementPackage& measurement_pack)
     //compute mean predicted measurement
     //multiply the weights with each element in the measurement sigma points matrix
     //then do a row-wise sum of the resulting matrix so that a summed vector is returned
-    z_pred = (Zsig * weights_).rowwise().sum();
+    z_pred << (Zsig * weights_).rowwise().sum();
 
     //calculate measurement covariance matrix S
     //save time and space by computing the mean and transpose ahead of time
     MatrixXd mean_subtracted = Zsig.colwise() - z_pred;
-    //MatrixXd mean_subtracted_transposed = mean_subtracted.transpose();
-
+    MatrixXd mean_subtracted_transposed = mean_subtracted.transpose();
     //sum the individual matrices
     for (int i = 0; i < (2 * n_aug_) + 1; i++)
     {
         //ensure phi is between -pi and pi
-        //normalized_angle = NormalizeAngle(mean_subtracted(1, i));
-        //mean_subtracted(1, i) = normalized_angle;
-        mean_subtracted(1, i) = NormalizeAngle(mean_subtracted(1, i));
-        //mean_subtracted_transposed(i, 1) = normalized_angle;
-        S += (weights_(i) * mean_subtracted.col(i) * (mean_subtracted.col(i)).transpose());
-        //mean_subtracted_transposed.row(i)
+        normalized_angle = NormalizeAngle(mean_subtracted(1, i));
+        mean_subtracted(1, i) = normalized_angle;
+        mean_subtracted_transposed(i, 1) = normalized_angle;
+        S += (weights_(i) * mean_subtracted.col(i) * mean_subtracted_transposed.row(i));
     }
 
     //compute the measurement noise matrix
@@ -246,19 +233,18 @@ void UKF::UpdateRadar(const MeasurementPackage& measurement_pack)
     //add the noise matrix to the covariance matrix
     S += R;
 
-    //compute means
+    //compute cross correlation matrix Tc
+    //compute means early, saving time and space
     MatrixXd Xmean_subtracted = Xsig_pred_.colwise() - x_;
-    MatrixXd Zmean_subtracted = Zsig.colwise() - z_pred;
-
-    //compute cross correlation matrix
+    MatrixXd Zmean_subtracted_transposed = (Zsig.colwise() - z_pred).transpose();
     //sum the individual matrices
     for (int i = 0; i < (2 * n_aug_) + 1; i++)
     {
         //ensure yaw is between -pi and pi
         Xmean_subtracted(3, i) = NormalizeAngle(Xmean_subtracted(3, i));
         //ensure phi is between -pi and pi
-        Zmean_subtracted(1, i) = NormalizeAngle(Zmean_subtracted(1, i));
-        Tc += (weights_(i) * Xmean_subtracted.col(i) * (Zmean_subtracted.col(i)).transpose());
+        Zmean_subtracted_transposed(i, 1) = NormalizeAngle(Zmean_subtracted_transposed(i, 1));
+        Tc += (weights_(i) * Xmean_subtracted.col(i) * Zmean_subtracted_transposed.row(i));
     }
 
     //compute Kalman gain K;
@@ -289,9 +275,7 @@ void UKF::UpdateLidar(const MeasurementPackage& measurement_pack)
     MatrixXd Tc = MatrixXd(n_x_, n_z);                    //create cross correlation matrix
     double px, py;                                        //used to extract particular values for easier handling
 
-    //init
-    Zsig.fill(0);
-    z_pred.fill(0);
+    //init since we're summing against them
     S.fill(0);
     R.fill(0);
     Tc.fill(0);
@@ -311,15 +295,16 @@ void UKF::UpdateLidar(const MeasurementPackage& measurement_pack)
     //compute mean predicted measurement
     //multiply the weights with each element in the measurement sigma points matrix
     //then do a row-wise sum of the resulting matrix so that a summed vector is returned
-    z_pred = (Zsig * weights_).rowwise().sum();
+    z_pred << (Zsig * weights_).rowwise().sum();
 
     //calculate measurement covariance matrix S
     //save time and space by computing the mean and transpose ahead of time
     MatrixXd mean_subtracted = Zsig.colwise() - z_pred;
+    MatrixXd mean_subtracted_transposed = mean_subtracted.transpose();
     //sum the individual matrices
     for (int i = 0; i < (2 * n_aug_) + 1; i++)
     {
-        S += (weights_(i) * mean_subtracted.col(i) * (mean_subtracted.col(i)).transpose());
+        S += (weights_(i) * mean_subtracted.col(i) * mean_subtracted_transposed.row(i));
     }
 
     //compute the measurement noise matrix
@@ -329,17 +314,16 @@ void UKF::UpdateLidar(const MeasurementPackage& measurement_pack)
     //add the noise matrix to the covariance matrix
     S += R;
 
-    //compute means
+    //compute cross correlation matrix Tc
+    //compute means early, saving time and space
     MatrixXd Xmean_subtracted = Xsig_pred_.colwise() - x_;
-    MatrixXd Zmean_subtracted = Zsig.colwise() - z_pred;
-
-    //compute cross correlation matrix
+    MatrixXd Zmean_subtracted_transposed = (Zsig.colwise() - z_pred).transpose();
     //sum the individual matrices
     for (int i = 0; i < (2 * n_aug_) + 1; i++)
     {
         //ensure yaw is between -pi and pi
         Xmean_subtracted(3, i) = NormalizeAngle(Xmean_subtracted(3, i));
-        Tc += (weights_(i) * Xmean_subtracted.col(i) * (Zmean_subtracted.col(i)).transpose());
+        Tc += (weights_(i) * Xmean_subtracted.col(i) * Zmean_subtracted_transposed.row(i));
     }
 
     //compute Kalman gain K;
@@ -356,23 +340,6 @@ void UKF::UpdateLidar(const MeasurementPackage& measurement_pack)
     //compute radar NIS
 }
 
-//normalize the supplied angle to be within -pi to pi
-double UKF::NormalizeAngle(const double angle)
-{
-    //local vars
-    double normalized_angle = angle;
-
-    //adjust phi to be between -pi and pi
-    //http://stackoverflow.com/questions/11980292/how-to-wrap-around-a-range
-    if (fabs(angle) > PI)
-    {
-        double two_pi = 2 * PI;
-        normalized_angle -= round(normalized_angle / two_pi) * two_pi;
-    }
-
-    return normalized_angle;
-}
-
 //create augmented sigma points
 //allows us to represent the uncertainty of the covariance matrix Q with sigma points
 void UKF::ComputeAugmentedSigmaPoints(MatrixXd& Xsig_aug)
@@ -381,9 +348,6 @@ void UKF::ComputeAugmentedSigmaPoints(MatrixXd& Xsig_aug)
     MatrixXd Q = MatrixXd(2, 2);                                //process noise covariance matrix
     VectorXd x_aug = VectorXd(n_aug_);                          //augmented mean vector
     MatrixXd P_aug = MatrixXd(n_aug_, n_aug_);                  //augmented state covariance
-
-    //init
-    P_aug.fill(0);
 
     //compute augmented mean state
     x_aug.head(n_x_) = x_; //copy x into first 5 elements of x_aug
@@ -396,6 +360,8 @@ void UKF::ComputeAugmentedSigmaPoints(MatrixXd& Xsig_aug)
          0, (std_yawdd_ * std_yawdd_);
 
     //compute augmented state covariance
+    //init
+    P_aug.fill(0); //if this isn't here, P_aug will be created with garbage in it that will drive x_, P_, and RMSE to inf/nan
     //set P to the top left corner
     P_aug.topLeftCorner(P_.rows(), P_.cols()) = P_;
     //set Q to the bottom right corner
@@ -432,9 +398,6 @@ void UKF::PredictSigmaPoints(const MatrixXd& Xsig_aug, const double delta_t)
     double delta_t_squared = delta_t * delta_t;             //delta_t squared is a multi-use operation (so we compute it once)
     double px, py, v, yaw, yaw_dot, nu_a, nu_yaw_dot_dot;   //used to hold current sigma point column values
     double predicted_px, predicted_py;                      //used to hold predicted px and py values
-
-    //init since this is reused
-    Xsig_pred_.fill(0);
 
     //predict sigma points
     //process each sigma point prediction
@@ -488,30 +451,44 @@ void UKF::PredictSigmaPoints(const MatrixXd& Xsig_aug, const double delta_t)
 //last step in delivering the new predicted state and covariance, we need to compute the mean and covariance of the predicted state
 void UKF::ComputeMeanAndCovarianceofPredictedSigmaPoints()
 {
-    //init since they are reused
-    x_.fill(0);
-    P_.fill(0);
+    //local vars
+    double normalized_angle; //used to normalize angles
 
     //predict state mean
     //multiply the weights with each element in the predicted sigma points matrix
     //then do a row-wise sum of the resulting matrix so that a summed vector is returned (stored in a global var x_)
-    x_ = (Xsig_pred_ * weights_).rowwise().sum();
+    x_ << (Xsig_pred_ * weights_).rowwise().sum();
 
-    //predict state covariance matrix
+    //predict state covariance
     //subtract the x vector from each column of Xsig_pred
     //save time and space by computing the mean and transpose ahead of time
     MatrixXd mean_subtracted = Xsig_pred_.colwise() - x_;
-    //MatrixXd mean_subtracted_transposed = mean_subtracted.transpose();
-
+    MatrixXd mean_subtracted_transposed = mean_subtracted.transpose();
     //sum the individual 5x5's, result is stored in a global var P_)
+    P_.fill(0); //init as we're summing
     for (int i = 0; i < (2 * n_aug_) + 1; i++)
     {
         //ensure yaw is between -pi and pi
-        //normalized_angle = NormalizeAngle(mean_subtracted(3, i));
-        //mean_subtracted(3, i) = normalized_angle;
-        mean_subtracted(3, i) = NormalizeAngle(mean_subtracted(3, i));
-        //mean_subtracted_transposed(i, 3) = normalized_angle;
-        P_ += weights_(i) * mean_subtracted.col(i) * (mean_subtracted.col(i)).transpose();
-        //mean_subtracted_transposed.row(i)
+        normalized_angle = NormalizeAngle(mean_subtracted(3, i));
+        mean_subtracted(3, i) = normalized_angle;
+        mean_subtracted_transposed(i, 3) = normalized_angle;
+        P_ += weights_(i) * mean_subtracted.col(i) * mean_subtracted_transposed.row(i);
     }
+}
+
+//normalize the supplied angle to be within -pi to pi
+double UKF::NormalizeAngle(const double angle)
+{
+    //local vars
+    double normalized_angle = angle;
+
+    //adjust phi to be between -pi and pi
+    //http://stackoverflow.com/questions/11980292/how-to-wrap-around-a-range
+    if (fabs(angle) > PI)
+    {
+        double two_pi = 2 * PI;
+        normalized_angle -= round(normalized_angle / two_pi) * two_pi;
+    }
+
+    return normalized_angle;
 }
