@@ -27,7 +27,8 @@ class UKF
         //destructor
         virtual ~UKF();
 
-        //state vector: [pos1 pos2 vel_abs yaw_angle yaw_rate] in SI units and rad
+        //state vector: px (position x), py (position y), v (speed or magnitude of velocity), yaw (orientation), yaw_dot (rate of change of orientation, if this is zero the vehicle is traveling in a straight line)
+        //in the CTRV model the velocity and yaw rate are constant
         VectorXd x_;
 
         //the current NIS for radar
@@ -88,14 +89,11 @@ class UKF
         //PI
         const double PI;
 
-        //perform unscented kalman prediciton steps
-        void PerformPrediction(double delta_t);
+        //function that handles first time init
+        void FirstTimeInit(const MeasurementPackage& measurement_pack);
 
-        /**
-         * Updates the state and the state covariance matrix using a laser measurement
-         * @param meas_package The measurement at k+1
-         */
-        void UpdateLidar(const MeasurementPackage& measurement_pack);
+        //perform unscented kalman prediciton steps
+        void PerformPrediction(const double delta_t);
 
         /**
          * Updates the state and the state covariance matrix using a radar measurement
@@ -103,11 +101,14 @@ class UKF
          */
         void UpdateRadar(const MeasurementPackage& measurement_pack);
 
+        /**
+         * Updates the state and the state covariance matrix using a laser measurement
+         * @param meas_package The measurement at k+1
+         */
+        void UpdateLidar(const MeasurementPackage& measurement_pack);
+
         //normalize the supplied angle to be within -pi to pi
         double NormalizeAngle(const double angle);
-
-        //function that handles first time init
-        void FirstTimeInit(const MeasurementPackage& measurement_pack);
 
         //generate the augmented sigma points
         void ComputeAugmentedSigmaPoints(MatrixXd& Xsig_aug);
@@ -117,15 +118,6 @@ class UKF
 
         //last step in delivering the new predicted state and covariance, we need to compute the mean and covariance of the predicted state
         void ComputeMeanAndCovarianceofPredictedSigmaPoints();
-
-        //transform the predicted state into the radar measurement space and then predict measurement mean and covariance
-        void PredictRadarMeasurement(const int& n_z, VectorXd& z_pred, MatrixXd& S, MatrixXd& Zsig);
-
-        //transform the predicted state into the lidar measurement space and then predict measurement mean and covariance
-        void PredictLidarMeasurement(const int& n_z, VectorXd& z_pred, MatrixXd& S, MatrixXd& Zsig);
-
-        //final step for this iteration, update the predicted state and covariance using the radar/lidar measurement
-        void UpdateState(const VectorXd& z_in, const VectorXd& z_pred_in, const MatrixXd& Zsig_in, const MatrixXd& S_in, const int& n_z_in);
 };
 
 #endif /* UKF_H */
